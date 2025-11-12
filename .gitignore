@@ -1,0 +1,16 @@
+# Node / JS
+node_modules/
+*.log
+
+# Python server log
+server.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VSCode
+.vscode/
+
+# Build artifacts
+dist/

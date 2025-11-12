@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fúria no Asfalto - Endless Runner</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <div class="hud">
+            <div class="score-display">
+                <span class="score-label">DISTÂNCIA:</span>
+                <span id="scoreValue">0</span>
+                <span class="score-unit">m</span>
+            </div>
+            <div class="coins-display">
+                <span class="coin-icon">💰</span>
+                <span id="coinsValue">0</span>
+            </div>
+            <div class="speed-display">
+                <span class="speed-label">VELOCIDADE:</span>
+                <span id="speedValue">0</span>
+                <span class="speed-unit">km/h</span>
+            </div>
+            <!-- Player 2 HUD (aparece em modo 2 jogadores) -->
+            <div class="p2-display hidden">
+                <span class="score-label">P2 DISTÂNCIA:</span>
+                <span id="scoreValueP2">0</span>
+                <span class="score-unit">m</span>
+                <span style="margin-left:12px;">💰</span>
+                <span id="coinsValueP2">0</span>
+            </div>
+        </div>
+
+        <canvas id="gameCanvas" width="400" height="600"></canvas>
+
+            <!-- Menu de Seleção de Modo -->
+            <div id="modeMenu" class="mode-menu">
+                <button id="startSingle" class="neon-button">Jogar Solo</button>
+                <button id="startTwo" class="neon-button">2 Jogadores</button>
+                <button id="startChamp" class="neon-button">Campeonato</button>
+            </div>
+        
+        <div id="gameOverScreen" class="game-over-screen hidden">
+            <h1 class="game-over-title">GAME OVER</h1>
+            <p class="final-score">Distância: <span id="finalScore">0</span> m</p>
+            <p class="final-coins">Moedas: <span id="finalCoins">0</span> 💰</p>
+            <button id="restartBtn" class="neon-button">JOGAR NOVAMENTE</button>
+        </div>
+        
+        <div class="controls-info">
+            <p>← → Use as setas para mover</p>
+        </div>
+
+        <div class="audio-controls">
+            <button id="toggleMusic" class="audio-btn" title="Música">🎵</button>
+            <button id="toggleSFX" class="audio-btn" title="Efeitos Sonoros">🔊</button>
+            <button id="openShop" class="audio-btn shop-btn" title="Loja">🛒</button>
+        </div>
+
+        <!-- Display de Moedas Totais -->
+        <div class="total-coins-display">
+            <span class="coin-icon">💰</span>
+            <span id="totalCoinsValue">0</span>
+        </div>
+    </div>
+
+    <!-- Menu da Loja -->
+    <div id="shopMenu" class="shop-menu hidden">
+        <div class="shop-container">
+            <h1 class="shop-title">🛒 LOJA DE CUSTOMIZAÇÃO</h1>
+
+            <div class="shop-balance">
+                <span>Saldo: </span>
+                <span class="coin-icon">💰</span>
+                <span id="shopCoinsValue">0</span>
+            </div>
+
+            <!-- Tabs -->
+            <div class="shop-tabs">
+                <button class="shop-tab active" data-tab="upgrades">⚡ UPGRADES</button>
+                <button class="shop-tab" data-tab="skins">🎨 SKINS</button>
+            </div>
+
+            <!-- Conteúdo: Upgrades -->
+            <div id="upgradesTab" class="shop-content active">
+                <div id="upgradesList" class="shop-items"></div>
+            </div>
+
+            <!-- Conteúdo: Skins -->
+            <div id="skinsTab" class="shop-content">
+                <div id="skinsList" class="shop-items"></div>
+            </div>
+
+            <button id="closeShop" class="shop-close-btn">VOLTAR AO JOGO</button>
+        </div>
+    </div>
+
+    <script src="audio.js"></script>
+    <script src="shop.js"></script>
+    <script src="assets.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
+
