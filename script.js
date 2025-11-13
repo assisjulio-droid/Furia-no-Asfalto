@@ -27,6 +27,12 @@ const player2 = {
 };
 let coinsP2 = 0;
 let distanceP2 = 0;
+const DEBUG = false; // set to true to enable debug logs for collisions
+
+// Helper de colisão (AABB)
+function rectsOverlap(a, b) {
+    return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
 let baseSpeed = 4;
 let currentSpeed = baseSpeed;
 let animationId;
@@ -210,6 +216,23 @@ async function initGame(selectedMode = 'single') {
     if (p2hud) {
         if (mode === 'two') p2hud.classList.remove('hidden');
         else p2hud.classList.add('hidden');
+    }
+
+    // Se for modo dois jogadores, tentar entrar em fullscreen para melhor experiência
+    if (mode === 'two') {
+        try {
+            const el = document.documentElement;
+            if (el.requestFullscreen) {
+                el.requestFullscreen();
+            } else if (el.webkitRequestFullscreen) { /* Safari */
+                el.webkitRequestFullscreen();
+            } else if (el.msRequestFullscreen) { /* IE11 */
+                el.msRequestFullscreen();
+            }
+        } catch (err) {
+            // fullscreen pode ser bloqueado pelo navegador; não é crítico
+            if (DEBUG) console.warn('Falha ao solicitar fullscreen:', err);
+        }
     }
 
     // Atualizar displays
@@ -739,10 +762,7 @@ function checkCollisions() {
                 height: obstacle.height - 30
             };
 
-            if (pHitbox.x < obstacleHitbox.x + obstacleHitbox.width &&
-                pHitbox.x + pHitbox.width > obstacleHitbox.x &&
-                pHitbox.y < obstacleHitbox.y + obstacleHitbox.height &&
-                pHitbox.y + pHitbox.height > obstacleHitbox.y) {
+                if (rectsOverlap(pHitbox, obstacleHitbox)) {
 
                 // Se escudo global ativo, destrói obstáculo
                 if (activePowerUps.shield.active) {
@@ -780,7 +800,9 @@ function checkCollisions() {
 
         for (let p of players) {
             if (!p.alive) continue;
-            if (p.x < coin.x + coin.width && p.x + p.width > coin.x && p.y < coin.y + coin.height && p.y + p.height > coin.y) {
+                const coinHit = { x: coin.x, y: coin.y, width: coin.width, height: coin.height };
+                const pBox = { x: p.x, y: p.y, width: p.width, height: p.height };
+                if (rectsOverlap(pBox, coinHit)) {
                 coin.collected = true;
                 if (p === player) {
                     coins += coinConfig.value;
@@ -800,7 +822,9 @@ function checkCollisions() {
 
         for (let p of players) {
             if (!p.alive) continue;
-            if (p.x < powerUp.x + powerUp.width && p.x + p.width > powerUp.x && p.y < powerUp.y + powerUp.height && p.y + p.height > powerUp.y) {
+            const puHit = { x: powerUp.x, y: powerUp.y, width: powerUp.width, height: powerUp.height };
+            const pBox2 = { x: p.x, y: p.y, width: p.width, height: p.height };
+            if (rectsOverlap(pBox2, puHit)) {
                 powerUp.collected = true;
                 activatePowerUp(powerUp.type);
 
