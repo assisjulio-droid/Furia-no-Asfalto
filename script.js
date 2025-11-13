@@ -1448,9 +1448,12 @@ document.querySelectorAll('.shop-tab').forEach(tab => {
 });
 
 // Menu de modos (botões)
-document.getElementById('startSingle')?.addEventListener('click', () => initGame('single'));
-document.getElementById('startTwo')?.addEventListener('click', () => initGame('two'));
-document.getElementById('startChamp')?.addEventListener('click', () => startChampionship());
+const startSingleBtn = document.getElementById('startSingle');
+if (startSingleBtn) startSingleBtn.addEventListener('click', () => initGame('single'));
+const startTwoBtn = document.getElementById('startTwo');
+if (startTwoBtn) startTwoBtn.addEventListener('click', () => initGame('two'));
+const startChampBtn = document.getElementById('startChamp');
+if (startChampBtn) startChampBtn.addEventListener('click', () => startChampionship());
 
 // ========================================
 // INICIAR O JOGO
@@ -1470,7 +1473,8 @@ function startChampionship() {
     Championship.currentRace = 0;
     Championship.results = [];
     mode = 'champ';
-    document.getElementById('modeMenu')?.classList.add('hidden');
+    const modeMenuEl = document.getElementById('modeMenu');
+    if (modeMenuEl) modeMenuEl.classList.add('hidden');
     startNextChampRace();
 }
 
