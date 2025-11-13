@@ -777,6 +777,9 @@ function checkCollisions() {
                 createExplosion(p.x + p.width / 2, p.y + p.height / 2, '#ff0000');
                 p.alive = false;
 
+                // remover o obstáculo que causou a colisão
+                obstacles.splice(i, 1);
+
                 // Se modo single, fim de jogo imediato
                 if (mode !== 'two') {
                     gameOver();
@@ -800,10 +803,14 @@ function checkCollisions() {
 
         for (let p of players) {
             if (!p.alive) continue;
-                const coinHit = { x: coin.x, y: coin.y, width: coin.width, height: coin.height };
-                const pBox = { x: p.x, y: p.y, width: p.width, height: p.height };
-                if (rectsOverlap(pBox, coinHit)) {
+            const coinHit = { x: coin.x, y: coin.y, width: coin.width, height: coin.height };
+            const pBox = { x: p.x, y: p.y, width: p.width, height: p.height };
+            if (rectsOverlap(pBox, coinHit)) {
+                // marcar e remover imediatamente para evitar múltiplas detecções
                 coin.collected = true;
+                const idx = coinsList.indexOf(coin);
+                if (idx > -1) coinsList.splice(idx, 1);
+
                 if (p === player) {
                     coins += coinConfig.value;
                 } else if (p === player2) {
@@ -826,6 +833,8 @@ function checkCollisions() {
             const pBox2 = { x: p.x, y: p.y, width: p.width, height: p.height };
             if (rectsOverlap(pBox2, puHit)) {
                 powerUp.collected = true;
+                const idx = powerUpsList.indexOf(powerUp);
+                if (idx > -1) powerUpsList.splice(idx, 1);
                 activatePowerUp(powerUp.type);
 
                 for (let i = 0; i < 15; i++) {
@@ -1236,18 +1245,26 @@ function movePlayer(direction) {
 document.addEventListener('keydown', (e) => {
     // Player 1 (setas)
     if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (DEBUG) console.debug('Keydown: ArrowLeft');
         movePlayer('left');
     } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (DEBUG) console.debug('Keydown: ArrowRight');
         movePlayer('right');
     }
 
     // Player 2 (A / D) - apenas em modo two
     if (mode === 'two') {
         if (e.key === 'a' || e.key === 'A') {
+            e.preventDefault();
+            if (DEBUG) console.debug('Keydown: P2 A');
             // mover player2 para a esquerda
             if (player2.currentLane > 0) player2.currentLane--;
             player2.x = player2.currentLane * roadConfig.laneWidth + (roadConfig.laneWidth / 2) - (player2.width / 2);
         } else if (e.key === 'd' || e.key === 'D') {
+            e.preventDefault();
+            if (DEBUG) console.debug('Keydown: P2 D');
             if (player2.currentLane < roadConfig.lanes - 1) player2.currentLane++;
             player2.x = player2.currentLane * roadConfig.laneWidth + (roadConfig.laneWidth / 2) - (player2.width / 2);
         }
