@@ -56,6 +56,52 @@ function debugLog(...args) {
 function rectsOverlap(a, b) {
     return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
+
+// Retorna hitbox padrão para uma entidade, com padding opcional
+function getHitbox(ent, padX = 15, padY = 20) {
+    if (!ent) return { x: 0, y: 0, width: 0, height: 0 };
+    const x = (ent.x || 0) + padX;
+    const y = (ent.y || 0) + padY;
+    const width = Math.max(0, (ent.width || 0) - padX * 2);
+    const height = Math.max(0, (ent.height || 0) - padY * 2);
+    return { x, y, width, height };
+}
+
+// Desenha hitboxes para debug quando DEBUG=true
+function drawDebugHitboxes() {
+    if (!DEBUG) return;
+    ctx.save();
+    // Jogadores
+    const players = [player];
+    if (mode === 'two') players.push(player2);
+    for (let p of players) {
+        const hb = getHitbox(p);
+        ctx.strokeStyle = p === player ? 'rgba(0,255,255,0.8)' : 'rgba(255,0,255,0.8)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(hb.x, hb.y, hb.width, hb.height);
+    }
+
+    // Obstáculos
+    ctx.strokeStyle = 'rgba(255,100,100,0.6)';
+    for (let obs of obstacles) {
+        const hb = getHitbox(obs, 12, 15);
+        ctx.strokeRect(hb.x, hb.y, hb.width, hb.height);
+    }
+
+    // Moedas
+    ctx.strokeStyle = 'rgba(255,255,0,0.6)';
+    for (let c of coinsList) {
+        ctx.strokeRect(c.x, c.y, c.width, c.height);
+    }
+
+    // Power-ups
+    ctx.strokeStyle = 'rgba(0,255,0,0.6)';
+    for (let pu of powerUpsList) {
+        ctx.strokeRect(pu.x, pu.y, pu.width, pu.height);
+    }
+
+    ctx.restore();
+}
 let baseSpeed = 4;
 let currentSpeed = baseSpeed;
 let animationId;
@@ -809,23 +855,13 @@ function checkCollisions() {
     for (let p of players) {
         if (!p.alive) continue;
 
-        const pHitbox = {
-            x: p.x + 15,
-            y: p.y + 20,
-            width: p.width - 30,
-            height: p.height - 40
-        };
+        const pHitbox = getHitbox(p, 15, 20);
 
         for (let i = obstacles.length - 1; i >= 0; i--) {
             const obstacle = obstacles[i];
-            const obstacleHitbox = {
-                x: obstacle.x + 12,
-                y: obstacle.y + 15,
-                width: obstacle.width - 24,
-                height: obstacle.height - 30
-            };
+            const obstacleHitbox = getHitbox(obstacle, 12, 15);
 
-                if (rectsOverlap(pHitbox, obstacleHitbox)) {
+            if (rectsOverlap(pHitbox, obstacleHitbox)) {
 
                 // Se escudo do jogador ativo, destrói obstáculo (aplica só ao jogador que colidiu)
                 if (p.activePowerUps && p.activePowerUps.shield.active) {
@@ -861,28 +897,38 @@ function checkCollisions() {
     for (let p of players) {
         if (!p.alive) continue;
 
-        const pHitbox = {
-            x: p.x + 15,
-            y: p.y + 20,
-            width: p.width - 30,
-            height: p.height - 40
-        };
+        const pHitbox = getHitbox(p, 15, 20);
 
         // Moedas (iterar de trás para frente para permitir splice)
         for (let i = coinsList.length - 1; i >= 0; i--) {
             const coin = coinsList[i];
             if (!coin) continue;
             const coinHit = { x: coin.x, y: coin.y, width: coin.width, height: coin.height };
+            // checagem primária por AABB
             if (rectsOverlap(pHitbox, coinHit)) {
-                // Remover a moeda da lista
                 coinsList.splice(i, 1);
-
-                if (p === player) {
-                    coins += coinConfig.value;
-                } else if (p === player2) {
-                    coinsP2 += coinConfig.value;
-                }
+                if (p === player) coins += coinConfig.value;
+                else if (p === player2) coinsP2 += coinConfig.value;
                 if (DEBUG) debugLog('Moeda coletada por', p === player ? 'Player1' : 'Player2', 'total now', p === player ? coins : coinsP2);
+                updateCoinsDisplay();
+                AudioSystem.play('coin');
+                playCollectEffect(coin.x, coin.y);
+                continue;
+            }
+            // fallback: verificar distância entre centros (evita falhas por hitboxes apertadas)
+            const px = p.x + p.width / 2;
+            const py = p.y + p.height / 2;
+            const cx = coin.x + coin.width / 2;
+            const cy = coin.y + coin.height / 2;
+            const dx = px - cx;
+            const dy = py - cy;
+            const distSq = dx * dx + dy * dy;
+            const thresh = Math.pow((Math.max(p.width, p.height) + Math.max(coin.width, coin.height)) * 0.35, 2);
+            if (distSq <= thresh) {
+                coinsList.splice(i, 1);
+                if (p === player) coins += coinConfig.value;
+                else if (p === player2) coinsP2 += coinConfig.value;
+                if (DEBUG) debugLog('(fallback) Moeda coletada por', p === player ? 'Player1' : 'Player2');
                 updateCoinsDisplay();
                 AudioSystem.play('coin');
                 playCollectEffect(coin.x, coin.y);
@@ -909,6 +955,32 @@ function checkCollisions() {
                         life: 40,
                         color: powerUp.type === 'shield' ? '#00ffff' : powerUp.type === 'magnet' ? '#ff00ff' : '#ff6600',
                         size: 4
+                    });
+                }
+                continue;
+            }
+            // fallback por distância entre centros
+            const px = p.x + p.width / 2;
+            const py = p.y + p.height / 2;
+            const ox = powerUp.x + powerUp.width / 2;
+            const oy = powerUp.y + powerUp.height / 2;
+            const dx = px - ox;
+            const dy = py - oy;
+            const distSq = dx * dx + dy * dy;
+            const thresh = Math.pow((Math.max(p.width, p.height) + Math.max(powerUp.width, powerUp.height)) * 0.32, 2);
+            if (distSq <= thresh) {
+                powerUpsList.splice(i, 1);
+                if (DEBUG) debugLog('(fallback) Power-up', powerUp.type, 'coletado por', p === player ? 'Player1' : 'Player2');
+                activatePowerUp(powerUp.type, p);
+                for (let j = 0; j < 12; j++) {
+                    particles.push({
+                        x: powerUp.x + powerUp.width / 2,
+                        y: powerUp.y + powerUp.height / 2,
+                        vx: (Math.random() - 0.5) * 4,
+                        vy: (Math.random() - 0.5) * 4,
+                        life: 30,
+                        color: powerUp.type === 'shield' ? '#00ffff' : powerUp.type === 'magnet' ? '#ff00ff' : '#ff6600',
+                        size: 3
                     });
                 }
             }
@@ -1280,6 +1352,9 @@ function updateGame() {
 
     // Verificar colisões
     checkCollisions();
+
+    // Desenhar hitboxes de debug (se habilitado) — após colisões para facilitar inspeção
+    drawDebugHitboxes();
 
     // Atualizar pontuação e velocidade
     updateScore();
