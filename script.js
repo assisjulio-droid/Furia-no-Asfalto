@@ -27,7 +27,7 @@ const player2 = {
 };
 let coinsP2 = 0;
 let distanceP2 = 0;
-const DEBUG = true; // set to true to enable debug logs and the on-screen debug overlay
+const DEBUG = false; // set to true to enable debug logs and the on-screen debug overlay
 
 // Debug helper: escreve no painel `#debugOverlay` e no console quando DEBUG=true
 function debugLog(...args) {
@@ -65,6 +65,42 @@ function getHitbox(ent, padX = 15, padY = 20) {
     const width = Math.max(0, (ent.width || 0) - padX * 2);
     const height = Math.max(0, (ent.height || 0) - padY * 2);
     return { x, y, width, height };
+}
+
+// Helper genérico de colisão: suporta 'rect' (AABB) e 'circle' (distância entre centros)
+function isColliding(a, b, opts = {}) {
+    const type = opts.type || 'rect';
+    if (!a || !b) return false;
+
+    if (type === 'rect') {
+        const padA = (opts.padA) ? opts.padA : { x: 15, y: 20 };
+        const padB = (opts.padB) ? opts.padB : { x: 12, y: 15 };
+        const A = getHitbox(a, padA.x, padA.y);
+        const B = getHitbox(b, padB.x, padB.y);
+        return rectsOverlap(A, B);
+    }
+
+    // Colisão circular (útil para moedas/powerups)
+    if (type === 'circle') {
+        const ax = (a.x || 0) + (a.width || 0) / 2;
+        const ay = (a.y || 0) + (a.height || 0) / 2;
+        const bx = (b.x || 0) + (b.width || 0) / 2;
+        const by = (b.y || 0) + (b.height || 0) / 2;
+        const af = opts.radiusFactorA || 0.45;
+        const bf = opts.radiusFactorB || 0.5;
+        const ar = (Math.max(a.width || 0, a.height || 0) * af) / 2;
+        const br = (Math.max(b.width || 0, b.height || 0) * bf) / 2;
+        const dx = ax - bx;
+        const dy = ay - by;
+        const distSq = dx * dx + dy * dy;
+        const thresh = (ar + br) * (ar + br);
+        return distSq <= thresh;
+    }
+
+    // fallback para AABB
+    const A = getHitbox(a);
+    const B = getHitbox(b);
+    return rectsOverlap(A, B);
 }
 
 // Desenha hitboxes para debug quando DEBUG=true
@@ -859,9 +895,8 @@ function checkCollisions() {
 
         for (let i = obstacles.length - 1; i >= 0; i--) {
             const obstacle = obstacles[i];
-            const obstacleHitbox = getHitbox(obstacle, 12, 15);
-
-            if (rectsOverlap(pHitbox, obstacleHitbox)) {
+            // usar colisão retangular padronizada
+            if (isColliding(p, obstacle, { type: 'rect', padA: { x: 15, y: 20 }, padB: { x: 12, y: 15 } })) {
 
                 // Se escudo do jogador ativo, destrói obstáculo (aplica só ao jogador que colidiu)
                 if (p.activePowerUps && p.activePowerUps.shield.active) {
@@ -903,32 +938,12 @@ function checkCollisions() {
         for (let i = coinsList.length - 1; i >= 0; i--) {
             const coin = coinsList[i];
             if (!coin) continue;
-            const coinHit = { x: coin.x, y: coin.y, width: coin.width, height: coin.height };
-            // checagem primária por AABB
-            if (rectsOverlap(pHitbox, coinHit)) {
+            // usar colisão circular mais permissiva para moedas
+            if (isColliding(p, coin, { type: 'circle', radiusFactorA: 0.45, radiusFactorB: 0.5 })) {
                 coinsList.splice(i, 1);
                 if (p === player) coins += coinConfig.value;
                 else if (p === player2) coinsP2 += coinConfig.value;
                 if (DEBUG) debugLog('Moeda coletada por', p === player ? 'Player1' : 'Player2', 'total now', p === player ? coins : coinsP2);
-                updateCoinsDisplay();
-                AudioSystem.play('coin');
-                playCollectEffect(coin.x, coin.y);
-                continue;
-            }
-            // fallback: verificar distância entre centros (evita falhas por hitboxes apertadas)
-            const px = p.x + p.width / 2;
-            const py = p.y + p.height / 2;
-            const cx = coin.x + coin.width / 2;
-            const cy = coin.y + coin.height / 2;
-            const dx = px - cx;
-            const dy = py - cy;
-            const distSq = dx * dx + dy * dy;
-            const thresh = Math.pow((Math.max(p.width, p.height) + Math.max(coin.width, coin.height)) * 0.35, 2);
-            if (distSq <= thresh) {
-                coinsList.splice(i, 1);
-                if (p === player) coins += coinConfig.value;
-                else if (p === player2) coinsP2 += coinConfig.value;
-                if (DEBUG) debugLog('(fallback) Moeda coletada por', p === player ? 'Player1' : 'Player2');
                 updateCoinsDisplay();
                 AudioSystem.play('coin');
                 playCollectEffect(coin.x, coin.y);
@@ -939,9 +954,8 @@ function checkCollisions() {
         for (let i = powerUpsList.length - 1; i >= 0; i--) {
             const powerUp = powerUpsList[i];
             if (!powerUp) continue;
-            const puHit = { x: powerUp.x, y: powerUp.y, width: powerUp.width, height: powerUp.height };
-            if (rectsOverlap(pHitbox, puHit)) {
-                // Remover o power-up da lista
+            // usar colisão circular para power-ups
+            if (isColliding(p, powerUp, { type: 'circle', radiusFactorA: 0.45, radiusFactorB: 0.6 })) {
                 powerUpsList.splice(i, 1);
                 if (DEBUG) debugLog('Power-up', powerUp.type, 'coletado por', p === player ? 'Player1' : 'Player2');
                 activatePowerUp(powerUp.type, p);
@@ -955,32 +969,6 @@ function checkCollisions() {
                         life: 40,
                         color: powerUp.type === 'shield' ? '#00ffff' : powerUp.type === 'magnet' ? '#ff00ff' : '#ff6600',
                         size: 4
-                    });
-                }
-                continue;
-            }
-            // fallback por distância entre centros
-            const px = p.x + p.width / 2;
-            const py = p.y + p.height / 2;
-            const ox = powerUp.x + powerUp.width / 2;
-            const oy = powerUp.y + powerUp.height / 2;
-            const dx = px - ox;
-            const dy = py - oy;
-            const distSq = dx * dx + dy * dy;
-            const thresh = Math.pow((Math.max(p.width, p.height) + Math.max(powerUp.width, powerUp.height)) * 0.32, 2);
-            if (distSq <= thresh) {
-                powerUpsList.splice(i, 1);
-                if (DEBUG) debugLog('(fallback) Power-up', powerUp.type, 'coletado por', p === player ? 'Player1' : 'Player2');
-                activatePowerUp(powerUp.type, p);
-                for (let j = 0; j < 12; j++) {
-                    particles.push({
-                        x: powerUp.x + powerUp.width / 2,
-                        y: powerUp.y + powerUp.height / 2,
-                        vx: (Math.random() - 0.5) * 4,
-                        vy: (Math.random() - 0.5) * 4,
-                        life: 30,
-                        color: powerUp.type === 'shield' ? '#00ffff' : powerUp.type === 'magnet' ? '#ff00ff' : '#ff6600',
-                        size: 3
                     });
                 }
             }
