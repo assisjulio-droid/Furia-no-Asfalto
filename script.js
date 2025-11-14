@@ -27,7 +27,7 @@ const player2 = {
 };
 let coinsP2 = 0;
 let distanceP2 = 0;
-const DEBUG = true; // set to true to enable debug logs and the on-screen debug overlay
+const DEBUG = false; // set to true to enable debug logs and the on-screen debug overlay
 
 // Debug helper: escreve no painel `#debugOverlay` e no console quando DEBUG=true
 function debugLog(...args) {
@@ -55,6 +55,88 @@ function debugLog(...args) {
 // Helper de colisão (AABB)
 function rectsOverlap(a, b) {
     return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+// Retorna hitbox padrão para uma entidade, com padding opcional
+function getHitbox(ent, padX = 15, padY = 20) {
+    if (!ent) return { x: 0, y: 0, width: 0, height: 0 };
+    const x = (ent.x || 0) + padX;
+    const y = (ent.y || 0) + padY;
+    const width = Math.max(0, (ent.width || 0) - padX * 2);
+    const height = Math.max(0, (ent.height || 0) - padY * 2);
+    return { x, y, width, height };
+}
+
+// Helper genérico de colisão: suporta 'rect' (AABB) e 'circle' (distância entre centros)
+function isColliding(a, b, opts = {}) {
+    const type = opts.type || 'rect';
+    if (!a || !b) return false;
+
+    if (type === 'rect') {
+        const padA = (opts.padA) ? opts.padA : { x: 15, y: 20 };
+        const padB = (opts.padB) ? opts.padB : { x: 12, y: 15 };
+        const A = getHitbox(a, padA.x, padA.y);
+        const B = getHitbox(b, padB.x, padB.y);
+        return rectsOverlap(A, B);
+    }
+
+    // Colisão circular (útil para moedas/powerups)
+    if (type === 'circle') {
+        const ax = (a.x || 0) + (a.width || 0) / 2;
+        const ay = (a.y || 0) + (a.height || 0) / 2;
+        const bx = (b.x || 0) + (b.width || 0) / 2;
+        const by = (b.y || 0) + (b.height || 0) / 2;
+        const af = opts.radiusFactorA || 0.45;
+        const bf = opts.radiusFactorB || 0.5;
+        const ar = (Math.max(a.width || 0, a.height || 0) * af) / 2;
+        const br = (Math.max(b.width || 0, b.height || 0) * bf) / 2;
+        const dx = ax - bx;
+        const dy = ay - by;
+        const distSq = dx * dx + dy * dy;
+        const thresh = (ar + br) * (ar + br);
+        return distSq <= thresh;
+    }
+
+    // fallback para AABB
+    const A = getHitbox(a);
+    const B = getHitbox(b);
+    return rectsOverlap(A, B);
+}
+
+// Desenha hitboxes para debug quando DEBUG=true
+function drawDebugHitboxes() {
+    if (!DEBUG) return;
+    ctx.save();
+    // Jogadores
+    const players = [player];
+    if (mode === 'two') players.push(player2);
+    for (let p of players) {
+        const hb = getHitbox(p);
+        ctx.strokeStyle = p === player ? 'rgba(0,255,255,0.8)' : 'rgba(255,0,255,0.8)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(hb.x, hb.y, hb.width, hb.height);
+    }
+
+    // Obstáculos
+    ctx.strokeStyle = 'rgba(255,100,100,0.6)';
+    for (let obs of obstacles) {
+        const hb = getHitbox(obs, 12, 15);
+        ctx.strokeRect(hb.x, hb.y, hb.width, hb.height);
+    }
+
+    // Moedas
+    ctx.strokeStyle = 'rgba(255,255,0,0.6)';
+    for (let c of coinsList) {
+        ctx.strokeRect(c.x, c.y, c.width, c.height);
+    }
+
+    // Power-ups
+    ctx.strokeStyle = 'rgba(0,255,0,0.6)';
+    for (let pu of powerUpsList) {
+        ctx.strokeRect(pu.x, pu.y, pu.width, pu.height);
+    }
+
+    ctx.restore();
 }
 let baseSpeed = 4;
 let currentSpeed = baseSpeed;
@@ -117,6 +199,9 @@ const player = {
     currentSkin: 'default'
 };
 
+// garantir que o jogador esteja 'vivo' por padrão para que colisões sejam processadas
+player.alive = true;
+
 // Arrays de Elementos do Jogo
 let obstacles = [];
 let coinsList = [];
@@ -172,7 +257,8 @@ async function initGame(selectedMode = 'single') {
     // Carregar assets se ainda não foram carregados
     if (!assetsLoaded) {
         await Assets.loadAll();
-        AudioSystem.init();
+        // Não inicializar o AudioContext automaticamente para evitar bloqueios do navegador
+        // O AudioSystem será inicializado após uma interação do usuário (botão Start)
         assetsLoaded = true;
     }
 
@@ -196,6 +282,7 @@ async function initGame(selectedMode = 'single') {
     roadConfig.lineOffset = 0;
     player.currentLane = 1;
     player.x = canvas.width / 2 - player.width / 2;
+    player.alive = true;
     // reset player2
     coinsP2 = 0;
     distanceP2 = 0;
@@ -265,6 +352,10 @@ async function initGame(selectedMode = 'single') {
     updateScoreDisplay();
     updateCoinsDisplay();
     updateSpeedDisplay();
+
+    // Coletar automaticamente quaisquer itens que estejam em contato com o(s) jogador(es)
+    // útil caso haja moedas/powerups posicionados no início da corrida
+    collectItemsAtStart();
     updateTotalCoinsDisplay();
 
     // Iniciar música
@@ -805,23 +896,12 @@ function checkCollisions() {
     for (let p of players) {
         if (!p.alive) continue;
 
-        const pHitbox = {
-            x: p.x + 15,
-            y: p.y + 20,
-            width: p.width - 30,
-            height: p.height - 40
-        };
+        const pHitbox = getHitbox(p, 15, 20);
 
         for (let i = obstacles.length - 1; i >= 0; i--) {
             const obstacle = obstacles[i];
-            const obstacleHitbox = {
-                x: obstacle.x + 12,
-                y: obstacle.y + 15,
-                width: obstacle.width - 24,
-                height: obstacle.height - 30
-            };
-
-                if (rectsOverlap(pHitbox, obstacleHitbox)) {
+            // usar colisão retangular padronizada
+            if (isColliding(p, obstacle, { type: 'rect', padA: { x: 15, y: 20 }, padB: { x: 12, y: 15 } })) {
 
                 // Se escudo do jogador ativo, destrói obstáculo (aplica só ao jogador que colidiu)
                 if (p.activePowerUps && p.activePowerUps.shield.active) {
@@ -857,27 +937,17 @@ function checkCollisions() {
     for (let p of players) {
         if (!p.alive) continue;
 
-        const pHitbox = {
-            x: p.x + 15,
-            y: p.y + 20,
-            width: p.width - 30,
-            height: p.height - 40
-        };
+        const pHitbox = getHitbox(p, 15, 20);
 
         // Moedas (iterar de trás para frente para permitir splice)
         for (let i = coinsList.length - 1; i >= 0; i--) {
             const coin = coinsList[i];
             if (!coin) continue;
-            const coinHit = { x: coin.x, y: coin.y, width: coin.width, height: coin.height };
-            if (rectsOverlap(pHitbox, coinHit)) {
-                // Remover a moeda da lista
+            // usar colisão circular mais permissiva para moedas
+            if (isColliding(p, coin, { type: 'circle', radiusFactorA: 0.45, radiusFactorB: 0.5 })) {
                 coinsList.splice(i, 1);
-
-                if (p === player) {
-                    coins += coinConfig.value;
-                } else if (p === player2) {
-                    coinsP2 += coinConfig.value;
-                }
+                if (p === player) coins += coinConfig.value;
+                else if (p === player2) coinsP2 += coinConfig.value;
                 if (DEBUG) debugLog('Moeda coletada por', p === player ? 'Player1' : 'Player2', 'total now', p === player ? coins : coinsP2);
                 updateCoinsDisplay();
                 AudioSystem.play('coin');
@@ -889,9 +959,8 @@ function checkCollisions() {
         for (let i = powerUpsList.length - 1; i >= 0; i--) {
             const powerUp = powerUpsList[i];
             if (!powerUp) continue;
-            const puHit = { x: powerUp.x, y: powerUp.y, width: powerUp.width, height: powerUp.height };
-            if (rectsOverlap(pHitbox, puHit)) {
-                // Remover o power-up da lista
+            // usar colisão circular para power-ups
+            if (isColliding(p, powerUp, { type: 'circle', radiusFactorA: 0.45, radiusFactorB: 0.6 })) {
                 powerUpsList.splice(i, 1);
                 if (DEBUG) debugLog('Power-up', powerUp.type, 'coletado por', p === player ? 'Player1' : 'Player2');
                 activatePowerUp(powerUp.type, p);
@@ -928,6 +997,66 @@ function playCollectEffect(x, y) {
             size: 3
         });
     }
+}
+
+// ========================================
+// COLETAR ITENS NO INÍCIO DO JOGO
+// ========================================
+function collectItemsAtStart() {
+    const players = [player];
+    if (mode === 'two') players.push(player2);
+
+    for (let p of players) {
+        if (!p.alive) continue;
+
+        const pHitbox = {
+            x: p.x + 15,
+            y: p.y + 20,
+            width: p.width - 30,
+            height: p.height - 40
+        };
+
+        // Coletar moedas que já estejam sobre o carro
+        for (let i = coinsList.length - 1; i >= 0; i--) {
+            const coin = coinsList[i];
+            if (!coin) continue;
+            const coinHit = { x: coin.x, y: coin.y, width: coin.width, height: coin.height };
+            if (rectsOverlap(pHitbox, coinHit)) {
+                coinsList.splice(i, 1);
+                if (p === player) coins += coinConfig.value;
+                else if (p === player2) coinsP2 += coinConfig.value;
+                if (DEBUG) debugLog('(start) Moeda coletada por', p === player ? 'Player1' : 'Player2');
+                AudioSystem.play('coin');
+                playCollectEffect(coin.x, coin.y);
+            }
+        }
+
+        // Coletar power-ups que já estejam sobre o carro
+        for (let i = powerUpsList.length - 1; i >= 0; i--) {
+            const powerUp = powerUpsList[i];
+            if (!powerUp) continue;
+            const puHit = { x: powerUp.x, y: powerUp.y, width: powerUp.width, height: powerUp.height };
+            if (rectsOverlap(pHitbox, puHit)) {
+                powerUpsList.splice(i, 1);
+                if (DEBUG) debugLog('(start) Power-up', powerUp.type, 'coletado por', p === player ? 'Player1' : 'Player2');
+                activatePowerUp(powerUp.type, p);
+                for (let j = 0; j < 12; j++) {
+                    particles.push({
+                        x: powerUp.x + powerUp.width / 2,
+                        y: powerUp.y + powerUp.height / 2,
+                        vx: (Math.random() - 0.5) * 4,
+                        vy: (Math.random() - 0.5) * 4,
+                        life: 30,
+                        color: powerUp.type === 'shield' ? '#00ffff' : powerUp.type === 'magnet' ? '#ff00ff' : '#ff6600',
+                        size: 3
+                    });
+                }
+            }
+        }
+    }
+
+    // Atualizar display após coletas iniciais
+    updateCoinsDisplay();
 }
 
 // ========================================
@@ -1216,6 +1345,9 @@ function updateGame() {
 
     // Verificar colisões
     checkCollisions();
+
+    // Desenhar hitboxes de debug (se habilitado) — após colisões para facilitar inspeção
+    drawDebugHitboxes();
 
     // Atualizar pontuação e velocidade
     updateScore();
@@ -1528,11 +1660,21 @@ document.querySelectorAll('.shop-tab').forEach(tab => {
 
 // Menu de modos (botões)
 const startSingleBtn = document.getElementById('startSingle');
-if (startSingleBtn) startSingleBtn.addEventListener('click', () => initGame('single'));
+if (startSingleBtn) startSingleBtn.addEventListener('click', () => {
+    // Iniciar o AudioSystem somente após gesto do usuário
+    try { if (!AudioSystem.context) AudioSystem.init(); } catch(_) {}
+    initGame('single');
+});
 const startTwoBtn = document.getElementById('startTwo');
-if (startTwoBtn) startTwoBtn.addEventListener('click', () => initGame('two'));
+if (startTwoBtn) startTwoBtn.addEventListener('click', () => {
+    try { if (!AudioSystem.context) AudioSystem.init(); } catch(_) {}
+    initGame('two');
+});
 const startChampBtn = document.getElementById('startChamp');
-if (startChampBtn) startChampBtn.addEventListener('click', () => startChampionship());
+if (startChampBtn) startChampBtn.addEventListener('click', () => {
+    try { if (!AudioSystem.context) AudioSystem.init(); } catch(_) {}
+    startChampionship();
+});
 
 // ========================================
 // INICIAR O JOGO
