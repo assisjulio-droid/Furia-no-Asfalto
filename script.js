@@ -27,7 +27,30 @@ const player2 = {
 };
 let coinsP2 = 0;
 let distanceP2 = 0;
-const DEBUG = false; // set to true to enable debug logs for collisions
+const DEBUG = false; // set to true to enable debug logs and the on-screen debug overlay
+
+// Debug helper: escreve no painel `#debugOverlay` e no console quando DEBUG=true
+function debugLog(...args) {
+    try {
+        if (DEBUG) {
+            console.log(...args);
+            const panel = document.getElementById('debugOverlay');
+            if (panel) {
+                panel.style.display = 'block';
+                const text = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+                const line = document.createElement('div');
+                line.textContent = text;
+                panel.appendChild(line);
+                // keep last 12 lines
+                while (panel.children.length > 12) panel.removeChild(panel.children[0]);
+                panel.scrollTop = panel.scrollHeight;
+            }
+        }
+    } catch (e) {
+        // não quebrar o jogo por causa do debug
+        try { console.log('debugLog error', e); } catch(_) {}
+    }
+}
 
 // Helper de colisão (AABB)
 function rectsOverlap(a, b) {
@@ -819,7 +842,7 @@ function checkCollisions() {
                 } else if (p === player2) {
                     coinsP2 += coinConfig.value;
                 }
-                if (DEBUG) console.log('Moeda coletada por', p === player ? 'Player1' : 'Player2', 'total now', p === player ? coins : coinsP2);
+                if (DEBUG) debugLog('Moeda coletada por', p === player ? 'Player1' : 'Player2', 'total now', p === player ? coins : coinsP2);
                 updateCoinsDisplay();
                 AudioSystem.play('coin');
                 playCollectEffect(coin.x, coin.y);
@@ -834,7 +857,7 @@ function checkCollisions() {
             if (rectsOverlap(pHitbox, puHit)) {
                 // Remover o power-up da lista
                 powerUpsList.splice(i, 1);
-                if (DEBUG) console.log('Power-up', powerUp.type, 'coletado por', p === player ? 'Player1' : 'Player2');
+                if (DEBUG) debugLog('Power-up', powerUp.type, 'coletado por', p === player ? 'Player1' : 'Player2');
                 activatePowerUp(powerUp.type);
 
                 for (let j = 0; j < 15; j++) {
@@ -1242,7 +1265,7 @@ function movePlayer(direction) {
 
 // Event Listeners para Teclado
 window.addEventListener('keydown', (e) => {
-    if (DEBUG) console.log('keydown:', e.key, 'gameRunning=', gameRunning, 'mode=', mode);
+    if (DEBUG) debugLog('keydown:', e.key, 'gameRunning=', gameRunning, 'mode=', mode);
 
     // Player 1 (setas)
     if (e.key === 'ArrowLeft') {
@@ -1502,7 +1525,7 @@ function startNextChampRace() {
     // armazenar alvo atual (em metros)
     Championship.currentTarget = target;
     // informar jogador
-    console.log(`Campeonato: corrida ${Championship.currentRace}/${Championship.totalRaces} alvo ${target}m`);
+    if (DEBUG) debugLog(`Campeonato: corrida ${Championship.currentRace}/${Championship.totalRaces} alvo ${target}m`);
 }
 
 function endChampRace(winnerName, winnerDistance) {
