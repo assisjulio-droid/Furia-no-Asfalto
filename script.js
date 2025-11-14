@@ -67,11 +67,7 @@ let highCoins = localStorage.getItem('highCoins') || 0;
 let totalGamesPlayed = localStorage.getItem('totalGamesPlayed') || 0;
 
 // Sistema de Power-ups
-let activePowerUps = {
-    shield: { active: false, duration: 0 },
-    magnet: { active: false, duration: 0 },
-    turbo: { active: false, duration: 0 }
-};
+// Nota: power-ups agora são por-jogador: cada jogador terá um objeto activePowerUps
 
 // Arrays de elementos
 let powerUpsList = [];
@@ -215,10 +211,17 @@ async function initGame(selectedMode = 'single') {
     // Aplicar skin atual
     updatePlayerSkin();
 
-    // Resetar power-ups
-    activePowerUps.shield.active = false;
-    activePowerUps.magnet.active = false;
-    activePowerUps.turbo.active = false;
+    // Inicializar / resetar power-ups por jogador
+    player.activePowerUps = {
+        shield: { active: false, duration: 0 },
+        magnet: { active: false, duration: 0 },
+        turbo: { active: false, duration: 0 }
+    };
+    player2.activePowerUps = {
+        shield: { active: false, duration: 0 },
+        magnet: { active: false, duration: 0 },
+        turbo: { active: false, duration: 0 }
+    };
 
     // Inicializar árvores nas laterais
     initTrees();
@@ -390,8 +393,8 @@ function drawClouds() {
 // ========================================
 function drawPlayer() {
     if (assetsLoaded && Assets.images.playerCar) {
-        // Desenhar escudo se ativo
-        if (activePowerUps.shield.active) {
+        // Desenhar escudo se ativo (por jogador)
+        if (player.activePowerUps && player.activePowerUps.shield.active) {
             ctx.save();
             ctx.strokeStyle = '#00ffff';
             ctx.lineWidth = 3;
@@ -418,8 +421,8 @@ function drawPlayer() {
         ctx.shadowBlur = 15;
         ctx.shadowColor = '#00ffff';
 
-        // Efeito turbo - rastro
-        if (activePowerUps.turbo.active) {
+        // Efeito turbo - rastro (por jogador)
+        if (player.activePowerUps && player.activePowerUps.turbo.active) {
             ctx.globalAlpha = 0.3;
             ctx.drawImage(Assets.images.playerCar, player.x, player.y + 10, player.width, player.height);
             ctx.globalAlpha = 0.5;
@@ -433,12 +436,45 @@ function drawPlayer() {
 
     // Desenhar segundo jogador se no modo de 2 jogadores
     if (mode === 'two' && player2.alive) {
-        if (assetsLoaded && Assets.images.playerCar) {
-            // desenhar uma versão deslocada para o P2 (pode usar mesma imagem por enquanto)
+        if (assetsLoaded) {
+            const imgP2 = Assets.images.playerCarP2 || Assets.images.playerCar;
+
+            // Desenhar escudo do P2 se ativo
+            if (player2.activePowerUps && player2.activePowerUps.shield.active) {
+                ctx.save();
+                ctx.strokeStyle = '#ff00ff';
+                ctx.lineWidth = 3;
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = '#ff00ff';
+
+                const pulseSize2 = 5 + Math.sin(frameCount * 0.2) * 3;
+                ctx.globalAlpha = 0.6 + Math.sin(frameCount * 0.2) * 0.2;
+                ctx.beginPath();
+                ctx.arc(
+                    player2.x + player2.width / 2,
+                    player2.y + player2.height / 2,
+                    player2.width / 2 + pulseSize2,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Efeito turbo P2
+            if (player2.activePowerUps && player2.activePowerUps.turbo.active) {
+                ctx.save();
+                ctx.globalAlpha = 0.3;
+                ctx.drawImage(imgP2, player2.x, player2.y + 10, player2.width, player2.height);
+                ctx.globalAlpha = 0.5;
+                ctx.drawImage(imgP2, player2.x, player2.y + 5, player2.width, player2.height);
+                ctx.restore();
+            }
+
             ctx.save();
             ctx.shadowBlur = 15;
             ctx.shadowColor = '#ff00ff';
-            ctx.drawImage(Assets.images.playerCar, player2.x, player2.y, player2.width, player2.height);
+            ctx.drawImage(imgP2, player2.x, player2.y, player2.width, player2.height);
             ctx.restore();
         }
     }
@@ -787,12 +823,12 @@ function checkCollisions() {
 
                 if (rectsOverlap(pHitbox, obstacleHitbox)) {
 
-                // Se escudo global ativo, destrói obstáculo
-                if (activePowerUps.shield.active) {
+                // Se escudo do jogador ativo, destrói obstáculo (aplica só ao jogador que colidiu)
+                if (p.activePowerUps && p.activePowerUps.shield.active) {
                     createExplosion(obstacle.x + obstacle.width / 2, obstacle.y + obstacle.height / 2, '#00ffff');
                     obstacles.splice(i, 1);
-                    activePowerUps.shield.active = false;
-                    activePowerUps.shield.duration = 0;
+                    p.activePowerUps.shield.active = false;
+                    p.activePowerUps.shield.duration = 0;
                     continue;
                 }
 
@@ -858,7 +894,7 @@ function checkCollisions() {
                 // Remover o power-up da lista
                 powerUpsList.splice(i, 1);
                 if (DEBUG) debugLog('Power-up', powerUp.type, 'coletado por', p === player ? 'Player1' : 'Player2');
-                activatePowerUp(powerUp.type);
+                activatePowerUp(powerUp.type, p);
 
                 for (let j = 0; j < 15; j++) {
                     particles.push({
@@ -976,21 +1012,22 @@ function updatePowerUps() {
 // ========================================
 // ATIVAR POWER-UP
 // ========================================
-function activatePowerUp(type) {
+function activatePowerUp(type, targetPlayer = player) {
+    if (!targetPlayer || !targetPlayer.activePowerUps) return;
     switch(type) {
         case 'shield':
-            activePowerUps.shield.active = true;
-            activePowerUps.shield.duration = powerUpConfig.shieldDuration;
+            targetPlayer.activePowerUps.shield.active = true;
+            targetPlayer.activePowerUps.shield.duration = powerUpConfig.shieldDuration;
             AudioSystem.play('shield');
             break;
         case 'magnet':
-            activePowerUps.magnet.active = true;
-            activePowerUps.magnet.duration = powerUpConfig.magnetDuration;
+            targetPlayer.activePowerUps.magnet.active = true;
+            targetPlayer.activePowerUps.magnet.duration = powerUpConfig.magnetDuration;
             AudioSystem.play('powerup');
             break;
         case 'turbo':
-            activePowerUps.turbo.active = true;
-            activePowerUps.turbo.duration = powerUpConfig.turboDuration;
+            targetPlayer.activePowerUps.turbo.active = true;
+            targetPlayer.activePowerUps.turbo.duration = powerUpConfig.turboDuration;
             AudioSystem.play('turbo');
             break;
     }
@@ -1000,28 +1037,32 @@ function activatePowerUp(type) {
 // ATUALIZAR POWER-UPS ATIVOS
 // ========================================
 function updateActivePowerUps() {
-    // Atualizar duração dos power-ups
-    for (let key in activePowerUps) {
-        if (activePowerUps[key].active) {
-            activePowerUps[key].duration--;
-            if (activePowerUps[key].duration <= 0) {
-                activePowerUps[key].active = false;
+    // Atualizar duração dos power-ups por jogador
+    const players = [player];
+    if (mode === 'two') players.push(player2);
+
+    for (let pl of players) {
+        if (!pl.activePowerUps) continue;
+        for (let key in pl.activePowerUps) {
+            if (pl.activePowerUps[key].active) {
+                pl.activePowerUps[key].duration--;
+                if (pl.activePowerUps[key].duration <= 0) {
+                    pl.activePowerUps[key].active = false;
+                }
             }
         }
     }
 
-    // Efeito do ímã - atrair moedas (com raio do upgrade)
-    if (activePowerUps.magnet.active) {
-        for (let coin of coinsList) {
-            if (!coin.collected) {
-                const dx = player.x + player.width / 2 - (coin.x + coin.width / 2);
-                const dy = player.y + player.height / 2 - (coin.y + coin.height / 2);
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                if (distance < powerUpConfig.magnetRadius) {
-                    coin.x += dx * 0.1;
-                    coin.y += dy * 0.1;
-                }
+    // Efeito do ímã - atrair moedas para cada jogador que tem o ímã ativo
+    for (let coin of coinsList) {
+        for (let pl of players) {
+            if (!pl.activePowerUps || !pl.activePowerUps.magnet.active) continue;
+            const dx = pl.x + pl.width / 2 - (coin.x + coin.width / 2);
+            const dy = pl.y + pl.height / 2 - (coin.y + coin.height / 2);
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < powerUpConfig.magnetRadius) {
+                coin.x += dx * 0.1;
+                coin.y += dy * 0.1;
             }
         }
     }
@@ -1045,7 +1086,7 @@ function updateScore() {
 
         // Limitar velocidade máxima (com bônus de upgrade)
         const maxSpeed = 12 + (player.maxSpeedBonus || 0);
-        if (!activePowerUps.turbo.active && currentSpeed > maxSpeed) {
+        if (currentSpeed > maxSpeed) {
             currentSpeed = maxSpeed;
         }
 
@@ -1053,16 +1094,21 @@ function updateScore() {
         increaseDifficulty();
     }
 
-    // Efeito turbo - velocidade extra
+    // Efeito turbo agora é por jogador: damos um pequeno boost de distância para o jogador que tiver turbo ativo
     let effectiveSpeed = currentSpeed;
-    if (activePowerUps.turbo.active) {
-        effectiveSpeed = currentSpeed * 1.5;
-    }
 
     // Atualizar displays
     if (frameCount % 5 === 0) { // Atualizar a cada 5 frames para performance
         updateScoreDisplay();
         updateSpeedDisplay();
+    }
+
+    // Turbo por jogador: incrementar distância extra quando ativo
+    if (player.activePowerUps && player.activePowerUps.turbo.active) {
+        distance += 1; // pequeno bônus de distância enquanto turbo ativo
+    }
+    if (mode === 'two' && player2.activePowerUps && player2.activePowerUps.turbo.active) {
+        distanceP2 += 1;
     }
 
     // Verificar alvo do campeonato (modo champ)

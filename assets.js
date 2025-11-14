@@ -418,6 +418,8 @@ const Assets = {
         return new Promise((resolve) => {
             // Criar todos os sprites
             this.images.playerCar = this.createPlayerCar();
+            // Sprite distinto para o Player 2 (cor magenta)
+            this.images.playerCarP2 = this.createPlayerCarWithColor('#ff00ff', '#8800ff');
             this.images.enemyCar1 = this.createEnemyCar('#ff0066', '#cc0044');
             this.images.enemyCar2 = this.createEnemyCar('#ff6600', '#cc4400');
             this.images.enemyCar3 = this.createEnemyCar('#9900ff', '#6600cc');
