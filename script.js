@@ -254,7 +254,8 @@ async function initGame(selectedMode = 'single') {
     // Carregar assets se ainda não foram carregados
     if (!assetsLoaded) {
         await Assets.loadAll();
-        AudioSystem.init();
+        // Não inicializar o AudioContext automaticamente para evitar bloqueios do navegador
+        // O AudioSystem será inicializado após uma interação do usuário (botão Start)
         assetsLoaded = true;
     }
 
@@ -1655,11 +1656,21 @@ document.querySelectorAll('.shop-tab').forEach(tab => {
 
 // Menu de modos (botões)
 const startSingleBtn = document.getElementById('startSingle');
-if (startSingleBtn) startSingleBtn.addEventListener('click', () => initGame('single'));
+if (startSingleBtn) startSingleBtn.addEventListener('click', () => {
+    // Iniciar o AudioSystem somente após gesto do usuário
+    try { if (!AudioSystem.context) AudioSystem.init(); } catch(_) {}
+    initGame('single');
+});
 const startTwoBtn = document.getElementById('startTwo');
-if (startTwoBtn) startTwoBtn.addEventListener('click', () => initGame('two'));
+if (startTwoBtn) startTwoBtn.addEventListener('click', () => {
+    try { if (!AudioSystem.context) AudioSystem.init(); } catch(_) {}
+    initGame('two');
+});
 const startChampBtn = document.getElementById('startChamp');
-if (startChampBtn) startChampBtn.addEventListener('click', () => startChampionship());
+if (startChampBtn) startChampBtn.addEventListener('click', () => {
+    try { if (!AudioSystem.context) AudioSystem.init(); } catch(_) {}
+    startChampionship();
+});
 
 // ========================================
 // INICIAR O JOGO
