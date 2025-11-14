@@ -27,7 +27,7 @@ const player2 = {
 };
 let coinsP2 = 0;
 let distanceP2 = 0;
-const DEBUG = false; // set to true to enable debug logs and the on-screen debug overlay
+const DEBUG = true; // set to true to enable debug logs and the on-screen debug overlay
 
 // Debug helper: escreve no painel `#debugOverlay` e no console quando DEBUG=true
 function debugLog(...args) {
