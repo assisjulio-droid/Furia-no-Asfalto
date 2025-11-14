@@ -777,9 +777,6 @@ function checkCollisions() {
                 createExplosion(p.x + p.width / 2, p.y + p.height / 2, '#ff0000');
                 p.alive = false;
 
-                // remover o obstáculo que causou a colisão
-                obstacles.splice(i, 1);
-
                 // Se modo single, fim de jogo imediato
                 if (mode !== 'two') {
                     gameOver();
@@ -797,47 +794,50 @@ function checkCollisions() {
         }
     }
 
-    // Colisão com moedas e powerups (verifica ambos jogadores)
-    for (let coin of coinsList) {
-        if (coin.collected) continue;
+    // Colisão com moedas e power-ups - verificar por jogador usando o mesmo hitbox
+    for (let p of players) {
+        if (!p.alive) continue;
 
-        for (let p of players) {
-            if (!p.alive) continue;
+        const pHitbox = {
+            x: p.x + 15,
+            y: p.y + 20,
+            width: p.width - 30,
+            height: p.height - 40
+        };
+
+        // Moedas (iterar de trás para frente para permitir splice)
+        for (let i = coinsList.length - 1; i >= 0; i--) {
+            const coin = coinsList[i];
+            if (!coin) continue;
             const coinHit = { x: coin.x, y: coin.y, width: coin.width, height: coin.height };
-            const pBox = { x: p.x, y: p.y, width: p.width, height: p.height };
-            if (rectsOverlap(pBox, coinHit)) {
-                // marcar e remover imediatamente para evitar múltiplas detecções
-                coin.collected = true;
-                const idx = coinsList.indexOf(coin);
-                if (idx > -1) coinsList.splice(idx, 1);
+            if (rectsOverlap(pHitbox, coinHit)) {
+                // Remover a moeda da lista
+                coinsList.splice(i, 1);
 
                 if (p === player) {
                     coins += coinConfig.value;
                 } else if (p === player2) {
                     coinsP2 += coinConfig.value;
                 }
+                if (DEBUG) console.log('Moeda coletada por', p === player ? 'Player1' : 'Player2', 'total now', p === player ? coins : coinsP2);
                 updateCoinsDisplay();
                 AudioSystem.play('coin');
                 playCollectEffect(coin.x, coin.y);
-                break;
             }
         }
-    }
 
-    for (let powerUp of powerUpsList) {
-        if (powerUp.collected) continue;
-
-        for (let p of players) {
-            if (!p.alive) continue;
+        // Power-ups (iterar de trás para frente)
+        for (let i = powerUpsList.length - 1; i >= 0; i--) {
+            const powerUp = powerUpsList[i];
+            if (!powerUp) continue;
             const puHit = { x: powerUp.x, y: powerUp.y, width: powerUp.width, height: powerUp.height };
-            const pBox2 = { x: p.x, y: p.y, width: p.width, height: p.height };
-            if (rectsOverlap(pBox2, puHit)) {
-                powerUp.collected = true;
-                const idx = powerUpsList.indexOf(powerUp);
-                if (idx > -1) powerUpsList.splice(idx, 1);
+            if (rectsOverlap(pHitbox, puHit)) {
+                // Remover o power-up da lista
+                powerUpsList.splice(i, 1);
+                if (DEBUG) console.log('Power-up', powerUp.type, 'coletado por', p === player ? 'Player1' : 'Player2');
                 activatePowerUp(powerUp.type);
 
-                for (let i = 0; i < 15; i++) {
+                for (let j = 0; j < 15; j++) {
                     particles.push({
                         x: powerUp.x + powerUp.width / 2,
                         y: powerUp.y + powerUp.height / 2,
@@ -848,7 +848,6 @@ function checkCollisions() {
                         size: 4
                     });
                 }
-                break;
             }
         }
     }
@@ -1242,29 +1241,23 @@ function movePlayer(direction) {
 }
 
 // Event Listeners para Teclado
-document.addEventListener('keydown', (e) => {
+window.addEventListener('keydown', (e) => {
+    if (DEBUG) console.log('keydown:', e.key, 'gameRunning=', gameRunning, 'mode=', mode);
+
     // Player 1 (setas)
     if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        if (DEBUG) console.debug('Keydown: ArrowLeft');
         movePlayer('left');
     } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        if (DEBUG) console.debug('Keydown: ArrowRight');
         movePlayer('right');
     }
 
     // Player 2 (A / D) - apenas em modo two
     if (mode === 'two') {
         if (e.key === 'a' || e.key === 'A') {
-            e.preventDefault();
-            if (DEBUG) console.debug('Keydown: P2 A');
             // mover player2 para a esquerda
             if (player2.currentLane > 0) player2.currentLane--;
             player2.x = player2.currentLane * roadConfig.laneWidth + (roadConfig.laneWidth / 2) - (player2.width / 2);
         } else if (e.key === 'd' || e.key === 'D') {
-            e.preventDefault();
-            if (DEBUG) console.debug('Keydown: P2 D');
             if (player2.currentLane < roadConfig.lanes - 1) player2.currentLane++;
             player2.x = player2.currentLane * roadConfig.laneWidth + (roadConfig.laneWidth / 2) - (player2.width / 2);
         }
