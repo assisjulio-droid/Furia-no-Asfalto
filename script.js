@@ -265,6 +265,10 @@ async function initGame(selectedMode = 'single') {
     updateScoreDisplay();
     updateCoinsDisplay();
     updateSpeedDisplay();
+
+    // Coletar automaticamente quaisquer itens que estejam em contato com o(s) jogador(es)
+    // útil caso haja moedas/powerups posicionados no início da corrida
+    collectItemsAtStart();
     updateTotalCoinsDisplay();
 
     // Iniciar música
@@ -928,6 +932,66 @@ function playCollectEffect(x, y) {
             size: 3
         });
     }
+}
+
+// ========================================
+// COLETAR ITENS NO INÍCIO DO JOGO
+// ========================================
+function collectItemsAtStart() {
+    const players = [player];
+    if (mode === 'two') players.push(player2);
+
+    for (let p of players) {
+        if (!p.alive) continue;
+
+        const pHitbox = {
+            x: p.x + 15,
+            y: p.y + 20,
+            width: p.width - 30,
+            height: p.height - 40
+        };
+
+        // Coletar moedas que já estejam sobre o carro
+        for (let i = coinsList.length - 1; i >= 0; i--) {
+            const coin = coinsList[i];
+            if (!coin) continue;
+            const coinHit = { x: coin.x, y: coin.y, width: coin.width, height: coin.height };
+            if (rectsOverlap(pHitbox, coinHit)) {
+                coinsList.splice(i, 1);
+                if (p === player) coins += coinConfig.value;
+                else if (p === player2) coinsP2 += coinConfig.value;
+                if (DEBUG) debugLog('(start) Moeda coletada por', p === player ? 'Player1' : 'Player2');
+                AudioSystem.play('coin');
+                playCollectEffect(coin.x, coin.y);
+            }
+        }
+
+        // Coletar power-ups que já estejam sobre o carro
+        for (let i = powerUpsList.length - 1; i >= 0; i--) {
+            const powerUp = powerUpsList[i];
+            if (!powerUp) continue;
+            const puHit = { x: powerUp.x, y: powerUp.y, width: powerUp.width, height: powerUp.height };
+            if (rectsOverlap(pHitbox, puHit)) {
+                powerUpsList.splice(i, 1);
+                if (DEBUG) debugLog('(start) Power-up', powerUp.type, 'coletado por', p === player ? 'Player1' : 'Player2');
+                activatePowerUp(powerUp.type, p);
+                for (let j = 0; j < 12; j++) {
+                    particles.push({
+                        x: powerUp.x + powerUp.width / 2,
+                        y: powerUp.y + powerUp.height / 2,
+                        vx: (Math.random() - 0.5) * 4,
+                        vy: (Math.random() - 0.5) * 4,
+                        life: 30,
+                        color: powerUp.type === 'shield' ? '#00ffff' : powerUp.type === 'magnet' ? '#ff00ff' : '#ff6600',
+                        size: 3
+                    });
+                }
+            }
+        }
+    }
+
+    // Atualizar display após coletas iniciais
+    updateCoinsDisplay();
 }
 
 // ========================================
