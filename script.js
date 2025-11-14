@@ -199,6 +199,9 @@ const player = {
     currentSkin: 'default'
 };
 
+// garantir que o jogador esteja 'vivo' por padrão para que colisões sejam processadas
+player.alive = true;
+
 // Arrays de Elementos do Jogo
 let obstacles = [];
 let coinsList = [];
@@ -279,6 +282,7 @@ async function initGame(selectedMode = 'single') {
     roadConfig.lineOffset = 0;
     player.currentLane = 1;
     player.x = canvas.width / 2 - player.width / 2;
+    player.alive = true;
     // reset player2
     coinsP2 = 0;
     distanceP2 = 0;
